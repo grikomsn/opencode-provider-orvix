@@ -1,0 +1,13 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "orvix/muse-spark-1.3",
+  "small_model": "orvix/auto",
+  "plugin": ["opencode-provider-orvix"],
+  "provider": {
+    "orvix": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Orvix",
+      "env": ["ORVIX_API_KEY"]
+    }
+  }
+}

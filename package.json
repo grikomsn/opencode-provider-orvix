@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "opencode-provider-orvix",
+  "version": "0.1.0",
+  "description": "OpenCode plugin for the Orvix AI model provider with live model discovery",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "opencode",
+    "opencode-provider",
+    "opencode-plugin",
+    "orvix",
+    "muse-spark",
+    "ai",
+    "llm",
+    "api-key"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/grikomsn/opencode-provider-orvix.git"
+  },
+  "bugs": {
+    "url": "https://github.com/grikomsn/opencode-provider-orvix/issues"
+  },
+  "homepage": "https://github.com/grikomsn/opencode-provider-orvix#readme",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "files": [
+    "plugin.ts",
+    "index.ts",
+    "src/",
+    "assets/cover.jpg",
+    "opencode.json",
+    "CHANGELOG.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "import": "./plugin.ts"
+    },
+    "./server": {
+      "import": "./plugin.ts"
+    },
+    "./library": {
+      "import": "./index.ts"
+    }
+  },
+  "main": "./plugin.ts",
+  "scripts": {
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm test",
+    "package": "npm pack --dry-run",
+    "changeset": "changeset",
+    "version": "changeset version && npm install --package-lock-only --ignore-scripts"
+  },
+  "peerDependencies": {
+    "@ai-sdk/openai-compatible": ">=1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@ai-sdk/openai-compatible": {
+      "optional": true
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "devDependencies": {
+    "@ai-sdk/openai-compatible": "^1.0.0",
+    "@changesets/cli": "^2.31.0",
+    "@opencode-ai/plugin": "^1.18.4",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.3"
+  }
+}
