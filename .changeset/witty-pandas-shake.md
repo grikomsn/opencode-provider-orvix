@@ -1,7 +1,5 @@
 ---
-changes:
-  - package: opencode-provider-orvix
-    type: minor
+"opencode-provider-orvix": minor
 ---
 
 Initial release of the OpenCode plugin for the Orvix AI model provider.
