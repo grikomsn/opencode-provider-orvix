@@ -90,13 +90,16 @@ export function orvixDisplayName(id: string): string {
  * Check whether a model ID is a non-chat model (embedding, image, etc.).
  *
  * BYOK routes can expose arbitrary upstream IDs, so anything that is not
- * chat-capable is filtered out of the OpenCode catalog.
+ * chat-capable is filtered out of the OpenCode catalog. The live Orvix
+ * `/models` directory also lists image-generation routes (e.g.
+ * `orvix/flux-2-pro`, `orvix/midjourney`) that must not surface as chat
+ * models.
  */
 export function isNonChatModel(id: string): boolean {
   const value = id.trim().toLowerCase();
   return (
     Boolean(value) &&
-    /(?:^|[-/])(point|embed(?:ding)?s?|image|video|audio|voice|rerank)(?:[-/.]|$)/.test(
+    /(?:^|[-/])(point|embed(?:ding)?s?|image|imagine|video|audio|voice|rerank|flux|midjourney|seedream)(?:[-/.]|$)/.test(
       value
     )
   );

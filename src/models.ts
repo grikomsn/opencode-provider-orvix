@@ -85,9 +85,9 @@ function costFromPricing(pricing: unknown): OpenCodeModelConfig["cost"] {
  *
  * Each raw API entry is mapped to an OpenCode model config with id, name,
  * reasoning support, tool-call support, cost, limits, and reasoning
- * variants. Models that are not chat-capable (embeddings, image, etc.)
- * are filtered out. Both managed `orvix/*` IDs and unprefixed BYOK IDs
- * are preserved verbatim.
+ * variants. Models that are not chat-capable (embeddings, image-generation
+ * routes, etc.) are filtered out. Both managed `orvix/*` IDs and unprefixed
+ * BYOK IDs are preserved verbatim.
  */
 export function parseModelsResponse(
   payload: OrvixModelsResponse
@@ -102,12 +102,22 @@ export function parseModelsResponse(
     const id = item.id.trim();
     if (!id) return [];
 
-    // Skip non-chat models (embeddings, image, video, rerank, etc.).
+    // Skip non-chat models (embeddings, image-generation routes, etc.).
+    // The live `/models` directory lists image-generation routes (e.g.
+    // `orvix/flux-2-pro`, `orvix/midjourney`) that advertise
+    // `image_generation: true` without tool support. The flag alone is not
+    // enough to filter on: `orvix/auto` is a chat router that also
+    // advertises `image_generation: true` alongside `tools: true`.
     if (isNonChatModel(id)) return [];
 
     const canonical = canonicalModelId(id);
     const fallback = known.get(canonical) ?? known.get(id);
     const capabilities = record(item.capabilities);
+    if (
+      capabilities?.image_generation === true &&
+      capabilities?.tools !== true
+    )
+      return [];
     const architecture = record(item.architecture);
     const modalities =
       strings(item.input_modalities).length > 0
