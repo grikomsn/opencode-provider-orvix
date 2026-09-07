@@ -110,6 +110,65 @@ describe("parseModelsResponse", () => {
     assert.equal(result[0]!.id, "orvix/muse-spark-1.3");
   });
 
+  test("skips live image-generation routes by id and capability flag", () => {
+    const payload: OrvixModelsResponse = {
+      data: [
+        { id: "orvix/muse-spark-1.3", capabilities: { tools: true } },
+        { id: "orvix/flux-2-pro", capabilities: { image_generation: true } },
+        { id: "orvix/midjourney", capabilities: { image_generation: true } },
+        {
+          id: "orvix/seedream-5.0-pro",
+          capabilities: { image_generation: true },
+        },
+        {
+          id: "orvix/grok-imagine-image",
+          capabilities: { image_generation: true },
+        },
+        {
+          id: "orvix/gpt-image-2",
+          capabilities: { image_generation: true },
+        },
+        {
+          id: "orvix/gemini-3-pro-image",
+          capabilities: { image_generation: true },
+        },
+        {
+          id: "orvix/qwen-image-3.0",
+          capabilities: { image_generation: true },
+        },
+      ],
+    };
+    const result = parseModelsResponse(payload);
+    assert.equal(result.length, 1);
+    assert.equal(result[0]!.id, "orvix/muse-spark-1.3");
+  });
+
+  test("filters image-generation routes even when the id looks chat-like", () => {
+    const payload: OrvixModelsResponse = {
+      data: [
+        {
+          id: "orvix/future-painter",
+          capabilities: { image_generation: true, tools: false },
+        },
+      ],
+    };
+    assert.deepEqual(parseModelsResponse(payload), []);
+  });
+
+  test("keeps chat routers that advertise image generation with tools", () => {
+    const payload: OrvixModelsResponse = {
+      data: [
+        {
+          id: "orvix/auto",
+          capabilities: { image_generation: true, tools: true },
+        },
+      ],
+    };
+    const result = parseModelsResponse(payload);
+    assert.equal(result.length, 1);
+    assert.equal(result[0]!.id, "orvix/auto");
+  });
+
   test("skips entries without a valid id", () => {
     const payload: OrvixModelsResponse = {
       data: [
@@ -146,6 +205,15 @@ describe("parseModelsResponse", () => {
     assert.equal(model.tool_call, true);
     assert.equal(model.limit!.context, 450000);
     assert.equal(model.limit!.output, 80000);
+  });
+
+  test("uses fallback tool_call for glm-5.3-flash when API omits it", () => {
+    const payload: OrvixModelsResponse = {
+      data: [{ id: "orvix/glm-5.3-flash" }],
+    };
+    const result = parseModelsResponse(payload);
+    assert.equal(result.length, 1);
+    assert.equal(result[0]!.tool_call, true);
   });
 
   test("omits cost when pricing is missing or incomplete", () => {

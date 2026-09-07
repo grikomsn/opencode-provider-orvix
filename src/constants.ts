@@ -200,7 +200,7 @@ const FALLBACK_DEFS: FallbackModelDef[] = [
     id: "orvix/glm-5.3-flash",
     name: "Orvix: GLM 5.3 Flash",
     reasoning: false,
-    tool_call: false,
+    tool_call: true,
     image: false,
     limit: { context: MANAGED_CONTEXT_WINDOW, output: 131_072 },
   },

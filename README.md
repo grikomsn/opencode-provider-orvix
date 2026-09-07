@@ -96,7 +96,7 @@ Or set a default model in your config:
 | `orvix/qwen-3.8-max` | 450,000 | 32,768 | — |
 | `orvix/kimi-k3` | 450,000 | 16,384 | — |
 
-The static catalog uses Orvix's enforced per-request ceilings. Authenticated model discovery enriches the catalog with live capabilities and pricing, while preserving these limits when the `/models` response is incomplete or stale. Unprefixed BYOK model IDs from your Orvix project appear automatically after discovery.
+The static catalog uses Orvix's enforced per-request ceilings. Authenticated model discovery enriches the catalog with live capabilities and pricing, while preserving these limits when the `/models` response is incomplete or stale. Unprefixed BYOK model IDs from your Orvix project appear automatically after discovery. Image-generation routes listed by the API (e.g. `orvix/flux-2-pro`, `orvix/midjourney`) are filtered out of the chat catalog.
 
 ## Configuration
 
