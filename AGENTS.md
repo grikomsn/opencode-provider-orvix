@@ -47,3 +47,12 @@ Uses changesets. Run `npm run changeset` to create a changeset file.
 - `reasoning_effort` values are verified per model (Orvix forwards them to
   the upstream provider; unsupported values surface as HTTP 502). Only
   expose variants listed in `THINKING_VARIANTS`.
+- The default export is a dual V1/V2 entrypoint: `Plugin.define({ id,
+  setup })` for OpenCode 2.x spread with `server()` for OpenCode 1.x
+  (≥ 1.18.29). V2 registration lives in `src/v2.ts` (catalog transform +
+  integration credential methods); V1 hooks live in `plugin.ts`. Do not
+  translate hooks between the two APIs.
+- `src/v2.ts` types the V2 context structurally, not via
+  `@opencode/plugin` types: at runtime `catalog.provider.list()` returns
+  flat `{ id, name, package, settings, … }` records, not the
+  `{ provider, models }` nesting shown in the published `.d.ts`.

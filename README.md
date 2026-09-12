@@ -28,12 +28,25 @@
 
 Add the package to your OpenCode config. OpenCode installs it automatically:
 
+**OpenCode 2.x:**
+
+```jsonc
+// ~/.config/opencode/opencode.json  or  .opencode/opencode.json
+{
+  "plugins": ["opencode-provider-orvix"]
+}
+```
+
+**OpenCode 1.x** (1.18.29+):
+
 ```jsonc
 // ~/.config/opencode/opencode.json  or  .opencode/opencode.json
 {
   "plugin": ["opencode-provider-orvix"]
 }
 ```
+
+The same package supports both plugin APIs. The V1 object entrypoint requires OpenCode 1.18.29 or newer; for older 1.x releases use `opencode-provider-orvix@0.2`.
 
 The legacy `opencode-provider-orvix/server` entry point remains supported.
 
@@ -100,7 +113,27 @@ The static catalog uses Orvix's enforced per-request ceilings. Authenticated mod
 
 ## Configuration
 
-### Provider options
+### OpenCode 2.x
+
+In OpenCode 2.x the plugin registers the provider, models, and credential methods through the plugin catalog and integration APIs. You can still override fields it does not manage:
+
+```jsonc
+{
+  "providers": {
+    "orvix": {
+      "name": "Orvix",
+      "package": "aisdk:@ai-sdk/openai-compatible",
+      "settings": {
+        "baseURL": "https://api.orvix.id/v1"
+      }
+    }
+  }
+}
+```
+
+Model entries the plugin registers never overwrite models you have configured under `providers.orvix.models`.
+
+### OpenCode 1.x
 
 The plugin sets these defaults automatically, but you can override them in your config:
 
@@ -127,10 +160,16 @@ export ORVIX_API_KEY="orv-sk_live_your-key"
 
 ## How it works
 
-1. **Config hook** — On startup, the plugin registers the `orvix` provider with `@ai-sdk/openai-compatible`, sets the base URL and environment variable, and populates the model catalog.
+On startup the plugin:
+
+1. **Registers the provider** — `orvix` with `@ai-sdk/openai-compatible` (V1: config hook; V2: catalog transform), the `https://api.orvix.id/v1` base URL, and the `ORVIX_API_KEY` environment variable.
 2. **Model discovery** — If `ORVIX_API_KEY` is available, the plugin fetches the live model list from `https://api.orvix.id/v1/models`. If the API is unreachable, it falls back to a static catalog of known Orvix models; verified limits remain in place if the endpoint reports stale values.
 3. **Model aliases** — OpenCode exposes managed models as `orvix/<name>` while sending Orvix's required `orvix/<name>` upstream IDs without duplicating the provider prefix. BYOK IDs without a prefix are passed through verbatim.
-4. **Auth hook** — The plugin provides an API key auth method so you can manage your key with OpenCode's `/connect orvix` command.
+4. **Auth** — V1 provides an API key auth hook; V2 registers `env` and `key` methods on the `orvix` integration so both `ORVIX_API_KEY` and OpenCode's `/connect orvix` resolve your credential.
+
+### Plugin API versions
+
+The package ships the dual V1/V2 entrypoint recommended by [OpenCode's plugin migration guide](https://opencode.ai/v2/docs/build/plugins/migrate-v1): the default export is a V2 `Plugin.define({ id: "orvix", setup })` definition spread together with a V1 `server()` function returning the classic `config` and `auth` hooks. OpenCode 1.x calls `server()`; OpenCode 2.x reads `id` and `setup`.
 
 ## Related projects
 

@@ -19,7 +19,9 @@ type PluginResult = {
   };
 };
 
-type PluginModule = { default: () => Promise<PluginResult> };
+type PluginModule = {
+  default: { server: () => Promise<PluginResult> };
+};
 
 let pluginFn: PluginModule["default"];
 
@@ -38,7 +40,8 @@ function setMockFetchResponse(
 
 before(async () => {
   const mod = await import("../plugin.ts");
-  pluginFn = mod.default;
+  // The default export is the dual V1/V2 entrypoint; V1 consumes `server()`.
+  pluginFn = mod.default.server;
 });
 
 beforeEach(() => {

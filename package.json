@@ -64,6 +64,9 @@
       "optional": true
     }
   },
+  "dependencies": {
+    "@opencode/plugin": "^2.0.2"
+  },
   "publishConfig": {
     "access": "public",
     "provenance": true
