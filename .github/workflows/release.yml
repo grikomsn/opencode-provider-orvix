@@ -79,11 +79,13 @@ jobs:
 
       - name: Publish to npm with trusted publishing
         if: steps.release.outputs.publish == 'true'
-        # Publish V1-line releases under the `v1` dist-tag so publishing
-        # 0.2.x from this branch never moves `latest` back from 0.3.x+.
+        # Publish V1-line releases under the `legacy-v1` dist-tag so
+        # publishing 0.2.x from this branch never moves `latest` back
+        # from 0.3.x+. (`v1` itself is not a legal dist-tag name because
+        # npm rejects tag names that parse as semver ranges.)
         run: |
           if [ "$GITHUB_REF_NAME" = "v1" ]; then
-            npm publish --access public --provenance --tag v1
+            npm publish --access public --provenance --tag legacy-v1
           else
             npm publish --access public --provenance
           fi
