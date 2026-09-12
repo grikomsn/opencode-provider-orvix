@@ -2,6 +2,17 @@
 
 Releases are managed by Changesets and `.github/workflows/release.yml`.
 
+## Branches
+
+- `main` tracks the current package line (OpenCode V1 + V2 plugin support,
+  0.3.x and later).
+- `v1` is the maintenance branch for the OpenCode V1-only plugin API
+  (0.2.x, branched from the `v0.2.1` tag). Changesets on the `v1` branch
+  open version pull requests against `v1`, and releases publish under the
+  `v1` npm dist-tag so they never move `latest` back from newer lines.
+  Users pinned to the V1 API can install with
+  `npm install opencode-provider-orvix@v1`.
+
 ## npm trusted publishing
 
 The package has already been bootstrapped on npm. Its trusted publisher must remain configured with:

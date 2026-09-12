@@ -2,7 +2,7 @@ name: Release
 
 on:
   push:
-    branches: [main]
+    branches: [main, v1]
   workflow_dispatch:
 
 concurrency:
@@ -79,7 +79,14 @@ jobs:
 
       - name: Publish to npm with trusted publishing
         if: steps.release.outputs.publish == 'true'
-        run: npm publish --access public --provenance
+        # Publish V1-line releases under the `v1` dist-tag so publishing
+        # 0.2.x from this branch never moves `latest` back from 0.3.x+.
+        run: |
+          if [ "$GITHUB_REF_NAME" = "v1" ]; then
+            npm publish --access public --provenance --tag v1
+          else
+            npm publish --access public --provenance
+          fi
 
       - name: Create GitHub release
         if: steps.release.outputs.release == 'true'
