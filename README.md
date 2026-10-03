@@ -115,7 +115,7 @@ The static catalog uses Orvix's enforced per-request ceilings. Authenticated mod
 
 ### OpenCode 2.x
 
-In OpenCode 2.x the plugin registers the provider, models, and credential methods through the plugin catalog and integration APIs. You can still override fields it does not manage:
+In OpenCode 2.x the plugin registers the provider, models, and credential methods through the plugin provider and integration APIs. You can still override fields it does not manage:
 
 ```jsonc
 {
@@ -162,7 +162,7 @@ export ORVIX_API_KEY="orv-sk_live_your-key"
 
 On startup the plugin:
 
-1. **Registers the provider** — `orvix` with `@ai-sdk/openai-compatible` (V1: config hook; V2: catalog transform), the `https://api.orvix.id/v1` base URL, and the `ORVIX_API_KEY` environment variable.
+1. **Registers the provider** — `orvix` with `@ai-sdk/openai-compatible` (V1: config hook; V2: provider transform), the `https://api.orvix.id/v1` base URL, and the `ORVIX_API_KEY` environment variable.
 2. **Model discovery** — If `ORVIX_API_KEY` is available, the plugin fetches the live model list from `https://api.orvix.id/v1/models`. If the API is unreachable, it falls back to a static catalog of known Orvix models; verified limits remain in place if the endpoint reports stale values.
 3. **Model aliases** — OpenCode exposes managed models as `orvix/<name>` while sending Orvix's required `orvix/<name>` upstream IDs without duplicating the provider prefix. BYOK IDs without a prefix are passed through verbatim.
 4. **Auth** — V1 provides an API key auth hook; V2 registers `env` and `key` methods on the `orvix` integration so both `ORVIX_API_KEY` and OpenCode's `/connect orvix` resolve your credential.

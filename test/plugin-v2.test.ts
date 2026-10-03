@@ -3,10 +3,10 @@ import { describe } from "node:test";
 import assert from "node:assert/strict";
 
 import type {
-  V2CatalogEditor,
   V2IntegrationEditor,
   V2ModelInfo,
   V2PluginContext,
+  V2ProviderEditor,
   V2ProviderInfo,
 } from "../src/v2.ts";
 import { V2_PROVIDER_PACKAGE, setupOrvix } from "../src/v2.ts";
@@ -26,41 +26,56 @@ function setMockFetchResponse(response: typeof mockFetchResponse) {
 }
 
 /**
- * Fake V2 catalog editor: tracks provider and model updates, optionally
- * seeded with pre-existing (user-configured) records.
+ * Fake V2 provider editor (`ctx.provider.transform`): tracks provider and
+ * model records, optionally seeded with user-configured ones.
  */
 class FakeCatalog {
   providers = new Map<string, V2ProviderInfo>();
   models = new Map<string, V2ModelInfo>();
   seedModels: [string, Partial<V2ModelInfo>][] = [];
 
-  editor(): V2CatalogEditor {
+  private modelsOf(providerID: string): Map<string, V2ModelInfo> {
+    const prefix = `${providerID}/`;
+    return new Map(
+      [...this.models]
+        .filter(([key]) => key.startsWith(prefix))
+        .map(([key, model]) => [key.slice(prefix.length), model])
+    );
+  }
+
+  private setModels(providerID: string, models: readonly V2ModelInfo[]): void {
+    for (const key of [...this.models.keys()]) {
+      if (key.startsWith(`${providerID}/`)) this.models.delete(key);
+    }
+    for (const model of models) this.models.set(`${providerID}/${model.id}`, model);
+  }
+
+  editor(): V2ProviderEditor {
     return {
-      provider: {
-        update: (providerID, update) => {
-          const current = this.providers.get(providerID) ?? {};
-          const draft: V2ProviderInfo = { ...current };
-          update(draft);
-          this.providers.set(providerID, draft);
-        },
+      get: (providerID) =>
+        this.providers.has(providerID)
+          ? { provider: this.providers.get(providerID)!, models: this.modelsOf(providerID) }
+          : undefined,
+      add: ({ info, models }) => {
+        this.providers.set(info.id!, { ...info });
+        this.setModels(info.id!, models);
       },
-      model: {
-        get: (providerID, modelID) => {
-          return this.models.has(`${providerID}/${modelID}`);
-        },
-        update: (providerID, modelID, update) => {
-          const key = `${providerID}/${modelID}`;
-          const draft: V2ModelInfo = { ...(this.models.get(key) ?? {}) };
-          update(draft);
-          this.models.set(key, draft);
-        },
+      update: (providerID, update) => {
+        const draft: V2ProviderInfo = { ...(this.providers.get(providerID) ?? {}) };
+        update(draft);
+        this.providers.set(providerID, draft);
+      },
+      models: {
+        set: (providerID, models) => this.setModels(providerID, models),
       },
     };
   }
 
+  /** User-configured models arrive with their provider entry. */
   replay(): void {
+    if (!this.providers.has("orvix")) this.providers.set("orvix", {});
     for (const [key, model] of this.seedModels) {
-      this.models.set(`orvix/${key}`, model as V2ModelInfo);
+      this.models.set(`orvix/${key}`, { id: key, ...model } as V2ModelInfo);
     }
   }
 }
@@ -106,7 +121,7 @@ function makeCtx(options: {
 }): V2PluginContext {
   const { catalog, integrations } = options;
   return {
-    catalog: {
+    provider: {
       transform: async (callback) => {
         callback(catalog.editor());
         return {};
@@ -224,14 +239,19 @@ describe("Orvix OpenCode V2 plugin", () => {
     assert.ok(auto.limit?.output);
     assert.deepEqual(auto.capabilities?.output, ["text"]);
 
+    // `id` is the OpenCode key; `modelID` is the exact upstream id.
+    assert.equal(auto.id, "auto");
+    assert.equal(auto.modelID, "orvix/auto");
+    assert.equal(auto.providerID, "orvix");
+
     const muse = catalog.models.get("orvix/muse-spark-1.3");
     assert.ok(muse);
-    // Variants are an array of { id, settings } in V2.
+    // Variants are an array of { id, body } in V2; body reaches the request.
     const variantIDs = muse.variants?.map((variant) => variant.id);
     assert.ok(variantIDs?.includes("low"));
     assert.ok(variantIDs?.includes("high"));
     const low = muse.variants?.find((variant) => variant.id === "low");
-    assert.deepEqual(low?.settings, { reasoning_effort: "low" });
+    assert.deepEqual(low?.body, { reasoning_effort: "low" });
   });
 
   test("never overwrites user-configured models", async () => {
