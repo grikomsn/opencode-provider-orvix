@@ -4,13 +4,16 @@
  * V2 plugins default-export a definition with an `id` and `setup(ctx)`.
  * The V1 `config` and `auth` hooks map to V2 domain APIs:
  *
- * - V1 `config` hook  -> `ctx.catalog.transform` (provider + models)
+ * - V1 `config` hook  -> `ctx.provider.transform` (provider + models)
  * - V1 `auth` hook    -> `ctx.integration.transform` (credential methods)
  *
  * The context is typed structurally instead of importing the full
  * `@opencode/plugin` context so this module stays decoupled from the
- * runtime dependency (see the note in `toV2Model` about the flat
- * `provider.list()` shape observed at runtime).
+ * runtime dependency.
+ *
+ * `@opencode/plugin` 2.0.4 removed `ctx.catalog`. Provider and model
+ * registration now go through `ctx.provider.transform`, whose editor
+ * exposes `get`, `add`, `update`, and `models.set`.
  */
 import {
   FALLBACK_MODELS,
@@ -42,11 +45,10 @@ export const V2_PROVIDER_PACKAGE = "aisdk:@ai-sdk/openai-compatible";
 const MODEL_RELEASED_FALLBACK = 1_700_000_000_000;
 
 /**
- * Mutable provider record exposed by `catalog.transform`.
+ * Provider record handled by `provider.transform`.
  *
- * Fields are optional because the editor may hand the callback a fresh
- * (empty) record when the provider does not exist yet; updates replay
- * when the registry rebuilds.
+ * Fields are optional so `update` callbacks can fill in only what the user
+ * has not configured; transforms replay when the registry rebuilds.
  */
 export interface V2ProviderInfo {
   id?: string;
@@ -58,10 +60,15 @@ export interface V2ProviderInfo {
 }
 
 /**
- * Mutable model record exposed by `catalog.transform`.
+ * Model record handed to `provider.transform` (`Model.Info` in V2).
+ *
+ * `id` is the key users select (`orvix/<id>`); `modelID` is what OpenCode
+ * sends upstream.
  */
 export interface V2ModelInfo {
   id?: string;
+  modelID?: string;
+  providerID?: string;
   name?: string;
   status?: string;
   enabled?: boolean;
@@ -73,23 +80,20 @@ export interface V2ModelInfo {
   }>;
   limit?: { context: number; output: number };
   capabilities?: { tools: boolean; input: string[]; output: string[] };
-  variants?: Array<{ id: string; settings: Record<string, unknown> }>;
+  variants?: Array<{ id: string; body: Record<string, unknown> }>;
 }
 
-export interface V2CatalogEditor {
-  provider: {
-    update(
-      providerID: string,
-      update: (provider: V2ProviderInfo) => void
-    ): void;
-  };
-  model: {
-    get(providerID: string, modelID: string): unknown;
-    update(
-      providerID: string,
-      modelID: string,
-      update: (model: V2ModelInfo) => void
-    ): void;
+export interface V2ProviderRecord {
+  provider: V2ProviderInfo;
+  models: ReadonlyMap<string, V2ModelInfo>;
+}
+
+export interface V2ProviderEditor {
+  get(providerID: string): V2ProviderRecord | undefined;
+  add(input: { info: V2ProviderInfo; models: readonly V2ModelInfo[] }): void;
+  update(providerID: string, update: (provider: V2ProviderInfo) => void): void;
+  models: {
+    set(providerID: string, models: readonly V2ModelInfo[]): void;
   };
 }
 
@@ -111,8 +115,8 @@ export interface V2IntegrationEditor {
 }
 
 export interface V2PluginContext {
-  catalog: {
-    transform(callback: (catalog: V2CatalogEditor) => void): Promise<unknown>;
+  provider: {
+    transform(callback: (editor: V2ProviderEditor) => void): Promise<unknown>;
   };
   integration: {
     transform(callback: (editor: V2IntegrationEditor) => void): Promise<unknown>;
@@ -127,7 +131,7 @@ export interface V2PluginContext {
  * Map an OpenCode model config (V1 shape) onto the V2 model record.
  *
  * Differences from the V1 config entry:
- * - `variants` becomes an array of `{ id, settings }` instead of a map.
+ * - `variants` becomes an array of `{ id, body }` instead of a map.
  * - `cost` becomes an array of tiered entries in dollars per million
  *   tokens. When the pricing payload is missing, cost stays empty —
  *   prices are never guessed.
@@ -138,6 +142,19 @@ export function toV2Model(
   model: OpenCodeModelConfig
 ): void {
   applyV2Model(target, model);
+}
+
+/**
+ * Build a complete V2 model record for `provider.transform`.
+ *
+ * `key` is the OpenCode-facing id (`muse-spark-1.3`, selected as
+ * `orvix/muse-spark-1.3`); `modelID` keeps the exact upstream id, so
+ * managed `orvix/*` and unprefixed BYOK ids both reach Orvix verbatim.
+ */
+export function buildV2Model(key: string, model: OpenCodeModelConfig): V2ModelInfo {
+  const record: V2ModelInfo = { id: key, modelID: model.id, providerID: PROVIDER_ID };
+  applyV2Model(record, model);
+  return record;
 }
 
 function applyV2Model(m: V2ModelInfo, model: OpenCodeModelConfig): void {
@@ -158,9 +175,11 @@ function applyV2Model(m: V2ModelInfo, model: OpenCodeModelConfig): void {
       ? [...model.modalities.output]
       : ["text"],
   };
-  m.variants = Object.entries(model.variants ?? {}).map(([id, settings]) => ({
+  // Variant `body` is merged into the request; `settings` configures the
+  // provider package and never reaches the wire.
+  m.variants = Object.entries(model.variants ?? {}).map(([id, body]) => ({
     id,
-    settings: (settings ?? {}) as Record<string, unknown>,
+    body: (body ?? {}) as Record<string, unknown>,
   }));
   m.cost = model.cost
     ? [
@@ -207,7 +226,7 @@ async function resolveApiKey(ctx: V2PluginContext): Promise<string | undefined> 
  * 2. Discovers live models when a credential is available, falling back
  *    to the static catalog otherwise.
  * 3. Upserts the provider record and model catalog through a single
- *    catalog transform (the V2 replacement for the V1 `config` hook).
+ *    provider transform (the V2 replacement for the V1 `config` hook).
  *    User-configured models already present in the catalog are never
  *    overwritten.
  */
@@ -241,14 +260,34 @@ export async function setupOrvix(ctx: V2PluginContext): Promise<void> {
   }
 
   // Merge precedence: fallback first, then discovered (overwrites
-  // fallback). User-configured models are preserved by the `model.get`
-  // check inside the transform below.
+  // fallback). User-configured models are preserved inside the transform
+  // below.
   const merged = { ...modelsToConfigMap(FALLBACK_MODELS), ...modelsToConfigMap(discovered) };
 
   // 3. Upsert the provider and models. Transforms are replayed on every
   // registry rebuild, so the callback must be synchronous and repeatable.
-  await ctx.catalog.transform((catalog) => {
-    catalog.provider.update(PROVIDER_ID, (provider) => {
+  await ctx.provider.transform((editor) => {
+    const ours = Object.entries(merged).map(([key, model]) =>
+      buildV2Model(key, model)
+    );
+    const existing = editor.get(PROVIDER_ID);
+
+    if (!existing) {
+      editor.add({
+        info: {
+          id: PROVIDER_ID,
+          name: PROVIDER_NAME,
+          package: V2_PROVIDER_PACKAGE,
+          integrationID: PROVIDER_ID,
+          activation: "enabled",
+          settings: { baseURL: ORVIX_BASE_URL },
+        },
+        models: ours,
+      });
+      return;
+    }
+
+    editor.update(PROVIDER_ID, (provider) => {
       if (!provider.package) provider.package = V2_PROVIDER_PACKAGE;
       if (!provider.name) provider.name = PROVIDER_NAME;
       if (!provider.settings || typeof provider.settings !== "object") {
@@ -259,10 +298,12 @@ export async function setupOrvix(ctx: V2PluginContext): Promise<void> {
       provider.integrationID = PROVIDER_ID;
     });
 
-    for (const [key, model] of Object.entries(merged)) {
-      // Never overwrite models the user has already configured.
-      if (catalog.model.get(PROVIDER_ID, key)) continue;
-      catalog.model.update(PROVIDER_ID, key, (m) => applyV2Model(m, model));
-    }
+    // Never overwrite models the user has already configured.
+    const userModels = [...existing.models.values()];
+    const userIDs = new Set(existing.models.keys());
+    editor.models.set(PROVIDER_ID, [
+      ...userModels,
+      ...ours.filter((model) => !userIDs.has(model.id!)),
+    ]);
   });
 }
