@@ -74,6 +74,16 @@ const FULL_VARIANTS = {
 } as const;
 
 /**
+ * The `none`/`low`/`high` ladder shared by routes whose live reasoning
+ * emission was verified on those three settings (2026-11-09).
+ */
+const MIMO_LADDER = {
+  none: variant("none"),
+  low: variant("low"),
+  high: variant("high"),
+} as const;
+
+/**
  * Verified per-model reasoning profiles.
  *
  * Keys are full upstream model IDs. Values list the `reasoning_effort`
@@ -118,6 +128,33 @@ export const THINKING_VARIANTS: Record<
     high: variant("high"),
     max: variant("max"),
   },
+  // Live-verified 2026-10-09: Orvix's glm-5.3-flash accepts reasoning_effort
+  // none (0 reasoning tokens) alongside low/high/max.
+  "orvix/glm-5.3-flash": {
+    none: variant("none"),
+    low: variant("low"),
+    high: variant("high"),
+    max: variant("max"),
+  },
+  // Live-verified 2026-10-09: Orvix's deepseek-v4.1-flash accepts low
+  // (ai& rejects it) plus none/high/max.
+  "orvix/deepseek-v4.1-flash": {
+    none: variant("none"),
+    low: variant("low"),
+    high: variant("high"),
+    max: variant("max"),
+  },
+  // Live-verified 2026-10-09: Orvix mimo routes accept none/low/high.
+  "orvix/mimo-v2.5": MIMO_LADDER,
+  "orvix/mimo-v2.5-pro": MIMO_LADDER,
+  "orvix/mimo-v2.6-pro": MIMO_LADDER,
+  // Live-verified 2026-11-09 (rotated key): these routes accept the ladder
+  // and demonstrably emit a reasoning channel on `high`/`low` while `none`
+  // returns none. kimi-k3 additionally 503s on `none` and `minimal`.
+  "orvix/grok-4.7": MIMO_LADDER,
+  "orvix/minimax-m3.1-flash": MIMO_LADDER,
+  "orvix/mimo-v2.6-flash": MIMO_LADDER,
+  "orvix/kimi-k3": MIMO_LADDER,
 };
 
 /**
@@ -149,12 +186,16 @@ type FallbackModelDef = {
  */
 const FALLBACK_DEFS: FallbackModelDef[] = [
   {
+    // Live capabilities captured 2026-10-08 (orvix-copilot-chat #39): the
+    // auto router advertises a 384,000-token output ceiling with vision,
+    // tool calling, and reasoning controls; per-request budgets are still
+    // capped by the server, so this affects only metadata.
     id: "orvix/auto",
     name: "Orvix: Orvix Auto",
-    reasoning: false,
-    tool_call: false,
-    image: false,
-    limit: { context: MANAGED_CONTEXT_WINDOW, output: 16_384 },
+    reasoning: true,
+    tool_call: true,
+    image: true,
+    limit: { context: MANAGED_CONTEXT_WINDOW, output: 384_000 },
   },
   {
     id: "orvix/muse-spark-1.2",
@@ -175,7 +216,7 @@ const FALLBACK_DEFS: FallbackModelDef[] = [
   {
     id: "orvix/mimo-v2.5",
     name: "Orvix: MiMo-V2.5",
-    reasoning: false,
+    reasoning: true,
     tool_call: true,
     image: true,
     limit: { context: MANAGED_CONTEXT_WINDOW, output: 128_000 },
@@ -183,7 +224,7 @@ const FALLBACK_DEFS: FallbackModelDef[] = [
   {
     id: "orvix/mimo-v2.5-pro",
     name: "Orvix: MiMo-V2.5-Pro",
-    reasoning: false,
+    reasoning: true,
     tool_call: true,
     image: false,
     limit: { context: MANAGED_CONTEXT_WINDOW, output: 128_000 },
@@ -199,9 +240,9 @@ const FALLBACK_DEFS: FallbackModelDef[] = [
   {
     id: "orvix/glm-5.3-flash",
     name: "Orvix: GLM 5.3 Flash",
-    reasoning: false,
+    reasoning: true,
     tool_call: true,
-    image: false,
+    image: true,
     limit: { context: MANAGED_CONTEXT_WINDOW, output: 131_072 },
   },
   {
@@ -229,12 +270,28 @@ const FALLBACK_DEFS: FallbackModelDef[] = [
     limit: { context: MANAGED_CONTEXT_WINDOW, output: 128_000 },
   },
   {
-    id: "orvix/grok-4.6",
-    name: "Orvix: Grok 4.6",
-    reasoning: false,
+    id: "orvix/grok-4.7",
+    name: "Orvix: Grok 4.7",
+    reasoning: true,
     tool_call: true,
     image: true,
     limit: { context: MANAGED_CONTEXT_WINDOW, output: 32_768 },
+  },
+  {
+    id: "orvix/deepseek-v4.1-flash",
+    name: "Orvix: DeepSeek V4.1 Flash",
+    reasoning: true,
+    tool_call: true,
+    image: true,
+    limit: { context: MANAGED_CONTEXT_WINDOW, output: 131_072 },
+  },
+  {
+    id: "orvix/deepseek-v4.1-flash-uncensored",
+    name: "Orvix: DeepSeek V4.1 Flash (Uncensored)",
+    reasoning: false,
+    tool_call: false,
+    image: false,
+    limit: { context: MANAGED_CONTEXT_WINDOW, output: 131_072 },
   },
   {
     id: "orvix/deepseek-v4-flash",
@@ -269,6 +326,86 @@ const FALLBACK_DEFS: FallbackModelDef[] = [
     limit: { context: MANAGED_CONTEXT_WINDOW, output: 32_000 },
   },
   {
+    id: "orvix/gemini-4-argon",
+    name: "Orvix: Gemini 4 Argon",
+    reasoning: false,
+    tool_call: true,
+    image: true,
+    limit: { context: MANAGED_CONTEXT_WINDOW, output: 65_536 },
+  },
+  {
+    id: "orvix/minimax-m3.1-flash",
+    name: "Orvix: MiniMax M3.1 Flash",
+    reasoning: true,
+    tool_call: true,
+    image: false,
+    limit: { context: MANAGED_CONTEXT_WINDOW, output: 32_768 },
+  },
+  {
+    id: "orvix/mimo-v2.6-flash",
+    name: "Orvix: MiMo-V2.6-Flash",
+    reasoning: true,
+    tool_call: true,
+    image: true,
+    limit: { context: MANAGED_CONTEXT_WINDOW, output: 32_768 },
+  },
+  {
+    id: "orvix/mimo-v2.6-pro",
+    name: "Orvix: MiMo-V2.6-Pro",
+    reasoning: true,
+    tool_call: true,
+    image: false,
+    limit: { context: MANAGED_CONTEXT_WINDOW, output: 128_000 },
+  },
+  {
+    id: "orvix/claude-haiku-5.5",
+    name: "Orvix: Claude Haiku 5.5",
+    reasoning: false,
+    tool_call: true,
+    image: true,
+    limit: { context: MANAGED_CONTEXT_WINDOW, output: 32_768 },
+  },
+  {
+    id: "orvix/claude-sonnet-5.5",
+    name: "Orvix: Claude Sonnet 5.5",
+    reasoning: false,
+    tool_call: true,
+    image: true,
+    limit: { context: MANAGED_CONTEXT_WINDOW, output: 32_768 },
+  },
+  {
+    id: "orvix/gpt-6-astra",
+    name: "Orvix: GPT-6 Astra",
+    reasoning: true,
+    tool_call: true,
+    image: true,
+    limit: { context: MANAGED_CONTEXT_WINDOW, output: 128_000 },
+  },
+  {
+    id: "orvix/gpt-6-luna",
+    name: "Orvix: GPT-6 Luna",
+    reasoning: true,
+    tool_call: true,
+    image: true,
+    limit: { context: MANAGED_CONTEXT_WINDOW, output: 128_000 },
+  },
+  {
+    id: "orvix/gpt-6-sol",
+    name: "Orvix: GPT-6 Sol",
+    reasoning: true,
+    tool_call: true,
+    image: true,
+    limit: { context: MANAGED_CONTEXT_WINDOW, output: 128_000 },
+  },
+  {
+    id: "orvix/muse-wonder-1.0",
+    name: "Orvix: Muse Wonder 1.0",
+    reasoning: false,
+    tool_call: true,
+    image: true,
+    limit: { context: MANAGED_CONTEXT_WINDOW, output: 32_768 },
+  },
+  {
     id: "orvix/minimax-m3",
     name: "Orvix: MiniMax M3",
     reasoning: false,
@@ -295,7 +432,7 @@ const FALLBACK_DEFS: FallbackModelDef[] = [
   {
     id: "orvix/kimi-k3",
     name: "Orvix: Kimi K3",
-    reasoning: false,
+    reasoning: true,
     tool_call: true,
     image: false,
     limit: { context: MANAGED_CONTEXT_WINDOW, output: 16_384 },

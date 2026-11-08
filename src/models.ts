@@ -124,10 +124,20 @@ export function parseModelsResponse(
         ? strings(item.input_modalities)
         : strings(architecture?.input_modalities);
 
-    const reasoning =
-      boolean(capabilities?.reasoning_effort) ??
-      fallback?.reasoning ??
-      false;
+    // The live `reasoning_effort` boolean is a gateway label, not an effort
+    // list — it has been observed flipping to `false` for routes whose
+    // verified profiles demonstrably reason (probed 2026-11-09: glm-5.3-flash,
+    // kimi-k3, grok-4.7, minimax-m3.1-flash, mimo-v2.6-* all still emit a
+    // reasoning channel). A verified thinking profile therefore keeps the
+    // route reasoning-capable; only routes without one follow the live flag.
+    const hasVerifiedProfile =
+      THINKING_VARIANTS[canonical] !== undefined ||
+      THINKING_VARIANTS[id] !== undefined;
+    const reasoning = hasVerifiedProfile
+      ? true
+      : (boolean(capabilities?.reasoning_effort) ??
+        fallback?.reasoning ??
+        false);
     const toolCall =
       boolean(item.tool_calling ?? item.tool_call ?? capabilities?.tools) ??
       fallback?.tool_call ??
@@ -196,6 +206,40 @@ export function parseModelsResponse(
 }
 
 /**
+ * Retry only pre-stream transient failures, honoring Retry-After with a 5s
+ * cap (the shared family policy). Catalog and discovery paths never retry
+ * streaming responses.
+ */
+function isTransientServerError(status: number): boolean {
+  return status === 429 || status === 502 || status === 503 || status === 504;
+}
+
+export function retryDelayMs(attempt: number, retryAfter: string | null = null): number {
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds) && seconds >= 0) return Math.min(5_000, seconds * 1_000);
+    const date = Date.parse(retryAfter);
+    if (Number.isFinite(date)) return Math.max(0, Math.min(5_000, date - Date.now()));
+  }
+  return Math.min(2_000, 250 * 2 ** Math.max(0, attempt));
+}
+
+async function waitForRetry(milliseconds: number, signal: AbortSignal | undefined): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const abort = (): void => {
+      clearTimeout(timer);
+      reject(signal!.reason);
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", abort);
+      resolve();
+    }, milliseconds);
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) abort();
+  });
+}
+
+/**
  * Fetch the live model catalog from the Orvix API.
  *
  * @param apiKey - Orvix project API key (Bearer token, `orv-sk_live_…`).
@@ -208,13 +252,21 @@ export async function fetchModels(
   signal?: AbortSignal
 ): Promise<OpenCodeModelConfig[]> {
   const timeout = AbortSignal.timeout(10_000);
-  const response = await fetch(`${ORVIX_BASE_URL}/models`, {
-    headers: {
-      Accept: "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
-  });
+  const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
+  let response: Response;
+  for (let attempt = 0; ; attempt++) {
+    combined.throwIfAborted();
+    response = await fetch(`${ORVIX_BASE_URL}/models`, {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      signal: combined,
+    });
+    if (attempt >= 2 || !isTransientServerError(response.status)) break;
+    await response.body?.cancel();
+    await waitForRetry(retryDelayMs(attempt, response.headers.get("retry-after")), combined);
+  }
   if (!response.ok) {
     throw new Error(`Orvix /models returned HTTP ${response.status}`);
   }

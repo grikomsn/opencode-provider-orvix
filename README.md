@@ -89,27 +89,41 @@ Or set a default model in your config:
 
 | Model | Context | Max output | Reasoning |
 |---|---:|---:|---|
-| `orvix/auto` | 450,000 | 16,384 | — |
+| `orvix/auto` | 450,000 | 384,000 | router (no verified effort list) |
 | `orvix/muse-spark-1.2` | 450,000 | 80,000 | `minimal`–`xhigh` |
 | `orvix/muse-spark-1.3` | 450,000 | 80,000 | `minimal`–`xhigh` |
-| `orvix/mimo-v2.5` | 450,000 | 128,000 | — |
-| `orvix/mimo-v2.5-pro` | 450,000 | 128,000 | — |
+| `orvix/mimo-v2.5` | 450,000 | 128,000 | `none`, `low`, `high` |
+| `orvix/mimo-v2.5-pro` | 450,000 | 128,000 | `none`, `low`, `high` |
+| `orvix/mimo-v2.6-flash` | 450,000 | 32,768 | `none`, `low`, `high` |
+| `orvix/mimo-v2.6-pro` | 450,000 | 128,000 | `none`, `low`, `high` |
 | `orvix/glm-5.2` | 450,000 | 32,768 | `none`–`max` |
-| `orvix/glm-5.3-flash` | 450,000 | 131,072 | — |
+| `orvix/glm-5.3-flash` | 450,000 | 131,072 | `none`, `low`, `high`, `max` |
 | `orvix/gpt-5.6-luna` | 450,000 | 128,000 | `none`–`max` |
 | `orvix/gpt-5.6-sol` | 450,000 | 128,000 | `none`–`max` |
 | `orvix/gpt-5.6-terra` | 450,000 | 128,000 | `none`–`max` |
-| `orvix/grok-4.6` | 450,000 | 32,768 | — |
+| `orvix/grok-4.7` | 450,000 | 32,768 | `none`, `low`, `high` |
 | `orvix/deepseek-v4-flash` | 450,000 | 384,000 | — |
 | `orvix/deepseek-v4-pro` | 450,000 | 384,000 | `none`, `low`, `high`, `max` |
+| `orvix/deepseek-v4.1-flash` | 450,000 | 131,072 | `none`, `low`, `high`, `max` |
+| `orvix/deepseek-v4.1-flash-uncensored` | 450,000 | 131,072 | — |
 | `orvix/gemini-3.7-flash` | 450,000 | 32,000 | — |
 | `orvix/gemini-3.8-flash` | 450,000 | 32,000 | — |
+| `orvix/gemini-4-argon` | 450,000 | 65,536 | — |
 | `orvix/minimax-m3` | 450,000 | 32,768 | — |
+| `orvix/minimax-m3.1-flash` | 450,000 | 32,768 | `none`, `low`, `high` |
+| `orvix/claude-haiku-5.5` | 450,000 | 32,768 | — |
+| `orvix/claude-sonnet-5.5` | 450,000 | 32,768 | — |
+| `orvix/gpt-6-astra` | 450,000 | 128,000 | router (no verified effort list) |
+| `orvix/gpt-6-luna` | 450,000 | 128,000 | router (no verified effort list) |
+| `orvix/gpt-6-sol` | 450,000 | 128,000 | router (no verified effort list) |
+| `orvix/muse-wonder-1.0` | 450,000 | 32,768 | — |
 | `orvix/qwen-3.8-flash` | 450,000 | 65,536 | — |
 | `orvix/qwen-3.8-max` | 450,000 | 32,768 | — |
-| `orvix/kimi-k3` | 450,000 | 16,384 | — |
+| `orvix/kimi-k3` | 450,000 | 16,384 | `none`, `low`, `high` |
 
 The static catalog uses Orvix's enforced per-request ceilings. Authenticated model discovery enriches the catalog with live capabilities and pricing, while preserving these limits when the `/models` response is incomplete or stale. Unprefixed BYOK model IDs from your Orvix project appear automatically after discovery. Image-generation routes listed by the API (e.g. `orvix/flux-2-pro`, `orvix/midjourney`) are filtered out of the chat catalog.
+
+Reasoning rows list the effort spellings a route accepts AND that produce a working reasoning channel (`none` emits none), verified against the live API on 2026-11-09. Routes marked "router (no verified effort list)" or "—" accept requests but have no verified per-effort semantics; some premium routes (gpt-5.6-sol, gpt-6-astra/sol, gemini-4-argon, muse-wonder-1.0, claude-fable/opus-5.5) require a higher credit tier than the verification account and stay unprofiled. `orvix/kimi-k3` rejects `none` and `minimal` with HTTP 503.
 
 ## Configuration
 

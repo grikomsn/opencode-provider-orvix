@@ -23,7 +23,13 @@ test("npm package contains the plugin and intended metadata only", () => {
     ["pack", "--dry-run", "--json", "--ignore-scripts"],
     { cwd: root, encoding: "utf8" }
   );
-  const [{ files }] = JSON.parse(output) as [{ files: Array<{ path: string }> }];
+  // npm <= 11 emits an array; npm 12 emits an object keyed by package name.
+  const parsed = JSON.parse(output) as
+    | Array<{ files: Array<{ path: string }> }>
+    | Record<string, { files: Array<{ path: string }> }>;
+  const [{ files }] = Array.isArray(parsed)
+    ? parsed
+    : [Object.values(parsed)[0]!];
   const paths = files.map((file) => file.path);
 
   for (const required of [

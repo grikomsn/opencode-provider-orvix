@@ -251,7 +251,7 @@ describe("parseModelsResponse", () => {
     const payload: OrvixModelsResponse = {
       data: [
         {
-          id: "orvix/mimo-v2.5",
+          id: "orvix/minimax-m3",
           capabilities: { tools: true },
         },
       ],
@@ -261,11 +261,33 @@ describe("parseModelsResponse", () => {
     assert.equal(result[0]!.variants, undefined);
   });
 
+  test("keeps verified thinking profiles even when the live flag says false", () => {
+    // The gateway's reasoning_effort boolean has been observed flipping to
+    // false for routes that demonstrably reason (probed 2026-11-09); a
+    // verified profile outranks the label.
+    const payload: OrvixModelsResponse = {
+      data: [
+        {
+          id: "orvix/glm-5.3-flash",
+          capabilities: { reasoning_effort: false, tools: true },
+        },
+      ],
+    };
+    const result = parseModelsResponse(payload);
+    assert.equal(result[0]!.reasoning, true);
+    assert.deepEqual(Object.keys(result[0]!.variants!).sort(), [
+      "high",
+      "low",
+      "max",
+      "none",
+    ]);
+  });
+
   test("sets tool_call to false when not in capabilities", () => {
     const payload: OrvixModelsResponse = {
       data: [
         {
-          id: "orvix/auto",
+          id: "custom-model",
         },
       ],
     };
@@ -378,19 +400,29 @@ describe("FALLBACK_MODELS", () => {
       "orvix/gpt-5.6-luna",
       "orvix/deepseek-v4-pro",
       "orvix/kimi-k3",
+      "orvix/grok-4.7",
+      "orvix/deepseek-v4.1-flash",
+      "orvix/gpt-6-astra",
+      "orvix/muse-wonder-1.0",
     ]) {
       assert.ok(ids.includes(expected), `missing ${expected}`);
     }
   });
 
-  test("only reasoning-capable models have variants", () => {
+  test("only reasoning-capable models have variants, and only from verified profiles", () => {
     for (const model of FALLBACK_MODELS) {
-      if (model.reasoning) {
-        assert.ok(model.variants);
-        assert.ok(Object.keys(model.variants!).length > 0);
-      } else {
-        assert.equal(model.variants, undefined);
+      if (model.variants) {
+        assert.ok(model.reasoning, `${model.id} has variants without reasoning`);
+        assert.ok(Object.keys(model.variants).length > 0);
       }
+    }
+    // Entries without a verified thinking profile (e.g. `orvix/auto`, the
+    // gpt-6 routers) expose no effort variants even when the live route
+    // advertises reasoning_effort — mirrors the upstream picker gating.
+    for (const unprofiled of ["orvix/auto", "orvix/gpt-6-astra", "orvix/gpt-6-luna", "orvix/gpt-6-sol"]) {
+      const model = FALLBACK_MODELS.find((m) => m.id === unprofiled);
+      assert.ok(model, `missing ${unprofiled}`);
+      assert.equal(model.variants, undefined, `${unprofiled} must not expose unverified efforts`);
     }
   });
 
@@ -400,7 +432,7 @@ describe("FALLBACK_MODELS", () => {
     );
     assert.deepEqual(limits["orvix/auto"], {
       context: 450_000,
-      output: 16_384,
+      output: 384_000,
     });
     assert.deepEqual(limits["orvix/muse-spark-1.3"], {
       context: 450_000,
@@ -410,5 +442,50 @@ describe("FALLBACK_MODELS", () => {
       context: 450_000,
       output: 384_000,
     });
+  });
+});
+
+describe("fetchModels retries", () => {
+  const originalFetch = globalThis.fetch;
+
+  test("retryDelayMs caps Retry-After at five seconds", async () => {
+    const { retryDelayMs } = await import("../src/models.ts");
+    assert.equal(retryDelayMs(0, "3600"), 5_000);
+    assert.equal(retryDelayMs(0, "2"), 2_000);
+    assert.equal(retryDelayMs(0, null), 250);
+    assert.equal(retryDelayMs(3, null), 2_000);
+    const date = new Date(Date.now() + 600_000).toUTCString();
+    assert.ok(retryDelayMs(0, date) <= 5_000);
+    assert.equal(retryDelayMs(0, "not-a-date"), 250);
+  });
+
+  test("retries transient catalog failures and gives up after two attempts", async () => {
+    const { fetchModels } = await import("../src/models.ts");
+    let calls = 0;
+    globalThis.fetch = (() => {
+      calls += 1;
+      return Promise.resolve(new Response(null, { status: 503 }));
+    }) as typeof globalThis.fetch;
+    try {
+      await assert.rejects(fetchModels("synthetic-key"), /HTTP 503/);
+      assert.equal(calls, 3);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("does not retry non-transient catalog failures", async () => {
+    const { fetchModels } = await import("../src/models.ts");
+    let calls = 0;
+    globalThis.fetch = (() => {
+      calls += 1;
+      return Promise.resolve(new Response(null, { status: 401 }));
+    }) as typeof globalThis.fetch;
+    try {
+      await assert.rejects(fetchModels("synthetic-key"), /HTTP 401/);
+      assert.equal(calls, 1);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });
